@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Morpion</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: Arial, sans-serif;
+            display: flex; justify-content: center; align-items: center;
+            min-height: 100vh; margin: 0; background: #f0f4f8;
+        }
+        .container {
+            background: #fff; border-radius: 16px; padding: 2rem 2rem 1.5rem;
+            box-shadow: 0 8px 24px rgba(0,0,0,.12); text-align: center;
+        }
+        h1 { margin: 0 0 .5rem; font-size: 1.6rem; color: #2c3e50; }
+        #status {
+            font-size: 1.1rem; margin-bottom: 1rem; min-height: 1.4em;
+            color: #34495e;
+        }
+        .grille {
+            display: grid; grid-template-columns: repeat(3, 80px);
+            gap: 4px; background: #bdc3c7; border-radius: 8px; padding: 4px;
+            justify-content: center;
+        }
+        .cell {
+            width: 80px; height: 80px; background: #ecf0f1;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 2.4rem; font-weight: bold; cursor: pointer;
+            border-radius: 6px; user-select: none;
+            color: #2c3e50; transition: background .15s;
+        }
+        .cell:hover { background: #d5dbdb; }
+        .cell.occupee { cursor: default; }
+        .cell.occupee:hover { background: #ecf0f1; }
+        .barre-outils { margin-top: 1rem; display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+        .barre-outils button, .barre-outils select {
+            font-size: .95rem; padding: 6px 14px; border-radius: 6px;
+            border: 1px solid #bdc3c7; background: #fff; cursor: pointer;
+        }
+        .barre-outils button { background: #3498db; color: #fff; border-color: #2980b9; }
+        .barre-outils button:hover { background: #2980b9; }
+        .barre-outils label { font-size: .9rem; margin-right: 2px; }
+        .statistiques {
+            margin-top: .6rem; font-size: .85rem; color: #7f8c8d;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Morpion</h1>
+    <div id="status">Tour du joueur X</div>
+    <div class="grille" id="grille"></div>
+    <div class="barre-outils">
+        <button id="btnNouveau">Nouvelle partie</button>
+        <label>Adversaire :
+            <select id="selectAdversaire">
+                <option value="humain">Deux joueurs</option>
+                <option value="ordi">Contre l'ordinateur</option>
+            </select>
+        </label>
+        <label>Difficulté :
+            <select id="selectDifficulte">
+                <option value="facile">Facile</option>
+                <option value="imbattable">Imbattable</option>
+            </select>
+        </label>
+    </div>
+    <div class="statistiques" id="stats"></div>
+</div>
+
+<script>
+// ─── État du jeu ───────────────────────────────────────────────
+let grille = ["", "", "", "", "", "", "", "", ""];
+let joueurActuel = "X";           // "X" commence toujours
+let partieTerminee = false;
+let adversaire = "humain";        // "humain" ou "ordi"
+let difficulte = "facile";        // "facile" ou "imbattable"
+
+// Statistiques (persistées dans localStorage)
+let stats = { X: 0, O: 0, nul: 0 };
+function chargerStats() {
+    try {
+        const s = localStorage.getItem("morpion_stats");
+        if (s) stats = JSON.parse(s);
+    } catch (_) {}
+}
+function sauverStats() {
+    localStorage.setItem("morpion_stats", JSON.stringify(stats));
+}
+chargerStats();
+
+const combos = [
+    [0,1,2], [3,4,5], [6,7,8],
+    [0,3,6], [1,4,7], [2,5,8],
+    [0,4,8], [2,4,6]
+];
+
+// ─── Affichage ─────────────────────────────────────────────────
+const grilleEl = document.getElementById("grille");
+const statusEl = document.getElementById("status");
+const statsEl  = document.getElementById("stats");
+
+function construireGrille() {
+    grilleEl.innerHTML = "";
+    for (let i = 0; i < 9; i++) {
+        const div = document.createElement("div");
+        div.className = "cell";
+        div.dataset.idx = i;
+        div.addEventListener("click", () => clicCell(i));
+        grilleEl.appendChild(div);
+    }
+}
+const cellules = () => grilleEl.children;
+
+function mettreAJourUI() {
+    for (let i = 0; i < 9; i++) {
+        const c = cellules()[i];
+        c.textContent = grille[i];
+        c.className = "cell" + (grille[i] !== "" ? " occupee" : "");
+    }
+    if (partieTerminee) return;
+    statusEl.textContent = `Tour du joueur ${joueurActuel}`;
+}
+
+function afficherStats() {
+    statsEl.textContent =
+        `X : ${stats.X} victoire(s)  ·  O : ${stats.O} victoire(s)  ·  Nul : ${stats.nul}`;
+}
+afficherStats();
+
+// ─── Logique ───────────────────────────────────────────────────
+function verifierGagnant() {
+    for (const [a, b, c] of combos) {
+        if (grille[a] && grille[a] === grille[b] && grille[a] === grille[c])
+            return grille[a];
+    }
+    return null;
+}
+
+function estPlein() { return grille.every(c => c !== ""); }
+
+function terminerPartie(gagnant) {
+    partieTerminee = true;
+    if (gagnant) {
+        statusEl.textContent = `Joueur ${gagnant} a gagné !`;
+        stats[gagnant]++;
+    } else {
+        statusEl.textContent = "Match nul !";
+        stats.nul++;
+    }
+    sauverStats();
+    afficherStats();
+}
+
+function reinitialiser() {
+    grille = ["", "", "", "", "", "", "", "", ""];
+    joueurActuel = "X";
+    partieTerminee = false;
+    statusEl.textContent = "Tour du joueur X";
+    mettreAJourUI();
+    // Si l'ordi commence (toujours X), il joue immédiatement
+    if (adversaire === "ordi" && joueurActuel === "X" && !partieTerminee) {
+        setTimeout(jouerOrdi, 300);
+    }
+}
+
+function clicCell(idx) {
+    if (partieTerminee) return;
+    if (grille[idx] !== "") return;
+    if (adversaire === "ordi" && joueurActuel === "O") return; // l'ordi joue O
+    jouerCoup(idx);
+}
+
+function jouerCoup(idx) {
+    grille[idx] = joueurActuel;
+    mettreAJourUI();
+    const g = verifierGagnant();
+    if (g) {
+        terminerPartie(g);
+        return;
+    }
+    if (estPlein()) {
+        terminerPartie(null);
+        return;
+    }
+    joueurActuel = joueurActuel === "X" ? "O" : "X";
+    statusEl.textContent = `Tour du joueur ${joueurActuel}`;
+    // Si c'est au tour de l'ordi, jouer automatiquement
+    if (adversaire === "ordi" && joueurActuel === "O" && !partieTerminee) {
+        setTimeout(jouerOrdi, 300);
+    }
+}
+
+// ─── IA ────────────────────────────────────────────────────────
+function jouerOrdi() {
+    if (partieTerminee) return;
+    if (joueurActuel !== "O") return; // l'ordi joue toujours O
+    const idx = (difficulte === "facile") ? coupFacile() : coupImbattable();
+    if (idx !== -1) jouerCoup(idx);
+}
+
+function coupFacile() {
+    const vides = [];
+    for (let i = 0; i < 9; i++) if (grille[i] === "") vides.push(i);
+    if (vides.length === 0) return -1;
+    return vides[Math.floor(Math.random() * vides.length)];
+}
+
+// ─── Minmax (imbattable) ───────────────────────────────────────
+function coupImbattable() {
+    let meilleurScore = -Infinity;
+    let meilleurCoup = -1;
+    for (let i = 0; i < 9; i++) {
+        if (grille[i] !== "") continue;
+        grille[i] = "O";
+        const score = minmax(grille, 0, false);
+        grille[i] = "";
+        if (score > meilleurScore) {
+            meilleurScore = score;
+            meilleurCoup = i;
+        }
+    }
+    return meilleurCoup;
+}
+
+function minmax(grilleEtat, profondeur, estMaximisant) {
+    const g = verifierGagnantEtat(grilleEtat);
+    if (g === "O") return 10 - profondeur;
+    if (g === "X") return profondeur - 10;
+    if (grilleEtat.every(c => c !== "")) return 0;
+
+    if (estMaximisant) {
+        let meilleur = -Infinity;
+        for (let i = 0; i < 9; i++) {
+            if (grilleEtat[i] !== "") continue;
+            grilleEtat[i] = "O";
+            meilleur = Math.max(meilleur, minmax(grilleEtat, profondeur + 1, false));
+            grilleEtat[i] = "";
+        }
+        return meilleur;
+    } else {
+        let meilleur = Infinity;
+        for (let i = 0; i < 9; i++) {
+            if (grilleEtat[i] !== "") continue;
+            grilleEtat[i] = "X";
+            meilleur = Math.min(meilleur, minmax(grilleEtat, profondeur + 1, true));
+            grilleEtat[i] = "";
+        }
+        return meilleur;
+    }
+}
+
+function verifierGagnantEtat(etat) {
+    for (const [a, b, c] of combos) {
+        if (etat[a] && etat[a] === etat[b] && etat[a] === etat[c])
+            return etat[a];
+    }
+    return null;
+}
+
+// ─── Événements UI ─────────────────────────────────────────────
+document.getElementById("btnNouveau").addEventListener("click", reinitialiser);
+
+document.getElementById("selectAdversaire").addEventListener("change", (e) => {
+    adversaire = e.target.value;
+    reinitialiser();
+});
+
+document.getElementById("selectDifficulte").addEventListener("change", (e) => {
+    difficulte = e.target.value;
+    reinitialiser();
+});
+
+// ─── Initialisation ────────────────────────────────────────────
+construireGrille();
+reinitialiser();
+</script>
+</body>
+</html>
